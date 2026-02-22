@@ -127,6 +127,63 @@ emailRouter.get('/status', async (_req, res) => {
   res.json({ configured, method: configured ? 'microsoft_graph' : 'mailto_fallback' })
 })
 
+// GET /api/email/inbox – real inbox from Microsoft Graph + match to customers
+emailRouter.get('/inbox', async (_req, res) => {
+  const senderEmail = process.env.MICROSOFT_SENDER_EMAIL || 'mail@direktvomhersteller.de'
+  const token = await getMicrosoftToken()
+
+  if (!token) {
+    return res.json({
+      configured: false,
+      message: 'Microsoft Graph nicht konfiguriert. Bitte MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID und MICROSOFT_CLIENT_SECRET in .env eintragen.',
+      emails: []
+    })
+  }
+
+  try {
+    // Fetch latest 50 messages from inbox
+    const response = await axios.get(
+      `https://graph.microsoft.com/v1.0/users/${senderEmail}/mailFolders/inbox/messages`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          $top: 50,
+          $orderby: 'receivedDateTime desc',
+          $select: 'id,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead,body'
+        }
+      }
+    )
+
+    const messages = response.data.value || []
+
+    // Match each message to a customer in our DB by sender email
+    const enriched = messages.map((msg: any) => {
+      const senderAddr = msg.from?.emailAddress?.address || ''
+      const customer = senderAddr
+        ? db.prepare('SELECT id, name, weclapp_id FROM customers WHERE email = ? COLLATE NOCASE').get(senderAddr) as { id: string; name: string; weclapp_id: string } | undefined
+        : undefined
+
+      return {
+        id: msg.id,
+        subject: msg.subject,
+        from: msg.from?.emailAddress,
+        receivedAt: msg.receivedDateTime,
+        preview: msg.bodyPreview,
+        body: msg.body?.content || msg.bodyPreview,
+        isRead: msg.isRead,
+        customerId: customer?.id,
+        customerName: customer?.name,
+        source: 'microsoft_graph',
+      }
+    })
+
+    return res.json({ configured: true, emails: enriched, total: enriched.length })
+  } catch (error: any) {
+    console.error('[Email] Inbox fetch error:', error.response?.data || error.message)
+    return res.status(500).json({ error: 'Postfach konnte nicht geladen werden', details: error.response?.data })
+  }
+})
+
 // GET /api/email/history/:customerId – sent emails + Weclapp activities
 emailRouter.get('/history/:customerId', async (req, res) => {
   const { customerId } = req.params

@@ -7,6 +7,7 @@ import { CustomerView } from './components/CustomerView/CustomerView'
 import { TemplateList } from './components/Templates/TemplateList'
 import { DailyPlan } from './components/DailyPlan/DailyPlan'
 import { AutomationSuggestions } from './components/Automations/AutomationSuggestions'
+import { Inbox } from './components/Inbox/Inbox'
 import { ChatBot } from './components/Chatbot/ChatBot'
 import { ChatbotTraining } from './components/Settings/ChatbotTraining'
 import { TaskDetailFull } from './components/TaskDetail/TaskDetailFull'
@@ -64,6 +65,8 @@ function App() {
         return <DailyPlan />
       case 'tasks':
         return <TaskList onTaskClick={handleTaskClick} />
+      case 'inbox':
+        return <Inbox />
       case 'orders':
         return <TaskList onTaskClick={handleTaskClick} />
       case 'customers':

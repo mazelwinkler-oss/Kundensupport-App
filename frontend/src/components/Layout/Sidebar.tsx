@@ -1,4 +1,4 @@
-import { Sun, ShoppingCart, Users, FileText, Zap, Settings } from 'lucide-react'
+import { Sun, ShoppingCart, Users, FileText, Zap, Settings, Mail } from 'lucide-react'
 import { cn } from '../../utils/cn'
 
 interface SidebarProps {
@@ -7,10 +7,11 @@ interface SidebarProps {
 }
 
 const menuItems = [
-  { id: 'today',     label: 'Heute',     icon: Sun },
-  { id: 'orders',    label: 'Aufträge',  icon: ShoppingCart },
-  { id: 'customers', label: 'Kunden',    icon: Users },
-  { id: 'templates', label: 'Vorlagen',  icon: FileText },
+  { id: 'today',     label: 'Heute',       icon: Sun },
+  { id: 'inbox',     label: 'Posteingang', icon: Mail },
+  { id: 'orders',    label: 'Aufträge',    icon: ShoppingCart },
+  { id: 'customers', label: 'Kunden',      icon: Users },
+  { id: 'templates', label: 'Vorlagen',    icon: FileText },
 ]
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
