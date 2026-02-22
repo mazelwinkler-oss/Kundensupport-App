@@ -162,6 +162,62 @@ export async function getOrdersAtRisk(): Promise<AtRiskOrdersResponse> {
   return response.data
 }
 
+// Daily Plan
+export interface DailyPlanItem {
+  position: number
+  task: Task & {
+    customerEmail?: string
+    customerPhone?: string
+  }
+  estimatedMinutes: number
+  startTime: string
+  endTime: string
+  isOverdue: boolean
+}
+
+export interface DailyPlan {
+  generatedAt: string
+  totalTasks: number
+  totalMinutes: number
+  estimatedFinishTime: string
+  urgentCount: number
+  overdueCount: number
+  items: DailyPlanItem[]
+}
+
+export async function getDailyPlan(): Promise<DailyPlan> {
+  const response = await api.get('/daily-plan')
+  return response.data
+}
+
+export async function markTaskDone(taskId: string): Promise<void> {
+  await api.patch(`/daily-plan/task/${taskId}/done`)
+}
+
+// Email
+export interface SendEmailParams {
+  to: string
+  subject: string
+  body: string
+  senderEmail?: string
+}
+
+export interface SendEmailResult {
+  success: boolean
+  method: 'graph' | 'mailto'
+  mailtoLink?: string
+}
+
+export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
+  const response = await api.post('/email/send', params)
+  return response.data
+}
+
+export async function getEmailStatus(): Promise<{ configured: boolean; method: string }> {
+  const response = await api.get('/email/status')
+  return response.data
+}
+
 // AI Suggestions
 export interface TemplateSuggestion {
   template_id: string

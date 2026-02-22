@@ -1,4 +1,4 @@
-import { Home, ListTodo, Users, FileText, BarChart3, Settings, Zap } from 'lucide-react'
+import { Home, ListTodo, Users, FileText, BarChart3, Settings, Zap, CalendarCheck } from 'lucide-react'
 import { cn } from '../../utils/cn'
 
 interface SidebarProps {
@@ -8,6 +8,7 @@ interface SidebarProps {
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: Home },
+  { id: 'daily-plan', label: 'Tagesplan', icon: CalendarCheck },
   { id: 'tasks', label: 'Aufgaben', icon: ListTodo },
   { id: 'customers', label: 'Kunden', icon: Users },
   { id: 'templates', label: 'Vorlagen', icon: FileText },

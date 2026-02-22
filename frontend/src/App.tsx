@@ -5,6 +5,7 @@ import { TaskList } from './components/TaskList/TaskList'
 import { CustomerView } from './components/CustomerView/CustomerView'
 import { TemplateList } from './components/Templates/TemplateList'
 import { TaskDetail } from './components/TaskDetail/TaskDetail'
+import { DailyPlan } from './components/DailyPlan/DailyPlan'
 import { Bell, Search, User } from 'lucide-react'
 import type { Task } from './services/unified'
 
@@ -33,6 +34,8 @@ function App() {
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard onTaskClick={handleTaskClick} />
+      case 'daily-plan':
+        return <DailyPlan />
       case 'tasks':
         return <TaskList onTaskClick={handleTaskClick} />
       case 'customers':

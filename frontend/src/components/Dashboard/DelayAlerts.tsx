@@ -135,7 +135,7 @@ export function DelayAlerts({ onOrderClick }: DelayAlertsProps) {
                 </div>
                 <div className="text-right ml-4">
                   <p className="text-sm font-medium text-gray-900">
-                    {order.totalAmount?.toFixed(2)} {order.currency}
+                    {order.totalAmount != null ? Number(order.totalAmount).toFixed(2) : '-'} {order.currency}
                   </p>
                   <p className="text-xs text-gray-500">
                     {order.status}

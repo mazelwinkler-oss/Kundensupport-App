@@ -10,6 +10,9 @@ import { hubspotRouter } from './routes/hubspot.js'
 import { weclappRouter } from './routes/weclapp.js'
 import { webhooksRouter } from './routes/webhooks.js'
 import { aiSuggestionsRouter } from './routes/ai-suggestions.js'
+import { dailyPlanRouter } from './routes/daily-plan.js'
+import { emailRouter } from './routes/email.js'
+import { startBackgroundJobs } from './services/sync.js'
 
 dotenv.config()
 
@@ -32,6 +35,8 @@ app.use('/api/hubspot', hubspotRouter)
 app.use('/api/weclapp', weclappRouter)
 app.use('/api/webhooks', webhooksRouter)
 app.use('/api/ai-suggestions', aiSuggestionsRouter)
+app.use('/api/daily-plan', dailyPlanRouter)
+app.use('/api/email', emailRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -47,4 +52,7 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
   console.log(`API endpoints available at http://localhost:${PORT}/api`)
+
+  // Start background jobs (Weclapp sync + auto-escalation)
+  startBackgroundJobs()
 })
