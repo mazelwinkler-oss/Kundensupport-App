@@ -2,6 +2,12 @@ import { db } from './database.js'
 import { randomUUID } from 'crypto'
 
 export function seedDatabase() {
+  // Only seed when explicitly requested via env var
+  if (process.env.SEED_DATA !== 'true') {
+    console.log('Seed skipped (set SEED_DATA=true to enable)')
+    return
+  }
+
   // Check if data already exists
   const customerCount = db.prepare('SELECT COUNT(*) as count FROM customers').get() as { count: number }
   if (customerCount.count > 0) {

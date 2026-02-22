@@ -96,6 +96,33 @@ export function initDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Emails sent from the app (for history + Weclapp sync)
+    CREATE TABLE IF NOT EXISTS emails (
+      id TEXT PRIMARY KEY,
+      customer_id TEXT,
+      direction TEXT NOT NULL DEFAULT 'outbound',
+      subject TEXT,
+      body TEXT NOT NULL,
+      recipient_email TEXT,
+      sent_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      weclapp_synced INTEGER DEFAULT 0,
+      template_id TEXT,
+      task_id TEXT,
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    );
+
+    -- Chatbot knowledge base (trainable Q&A pairs)
+    CREATE TABLE IF NOT EXISTS chatbot_knowledge (
+      id TEXT PRIMARY KEY,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      category TEXT DEFAULT 'general',
+      keywords TEXT,
+      use_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Create indexes
     CREATE INDEX IF NOT EXISTS idx_tasks_source ON tasks(source);
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -133,57 +160,123 @@ export function initDatabase() {
       VALUES (?, ?, ?, ?, ?, ?)
     `)
 
+    // Templates follow Black Book principles:
+    // - Personal greeting: "Hallo Herr/Frau {Nachname}" (never "Sehr geehrte/r")
+    // - Clear, benefit-focused language
+    // - No weak phrases ("Wir schauen mal", "eventuell")
+    // - Short & direct
     const defaultTemplates = [
       {
         id: 'tpl-1',
         name: 'Versandbestaetigung',
         category: 'Versand',
-        subject: 'Ihre Bestellung {Bestellnummer} wurde versendet',
-        content: `Guten Tag {Kundenname},
+        subject: 'Ihre Bestellung {Bestellnummer} ist unterwegs',
+        content: `Hallo {Anrede} {Nachname},
 
-wir freuen uns, Ihnen mitteilen zu koennen, dass Ihre Bestellung {Bestellnummer} soeben unser Lager verlassen hat.
+Ihre Bestellung ist unterwegs – Sie bekommen Ihr Paket am {Lieferdatum}.
 
-Voraussichtliches Lieferdatum: {Lieferdatum}
-Tracking-Nummer: {Trackingnummer}
+Bestellnummer: {Bestellnummer}
+Tracking: {Trackingnummer}
 
-Bei Fragen stehen wir Ihnen gerne zur Verfuegung.
+Bei Fragen bin ich direkt fuer Sie erreichbar.
 
-Mit freundlichen Gruessen
-Ihr Support-Team`,
-        placeholders: JSON.stringify(['Kundenname', 'Bestellnummer', 'Lieferdatum', 'Trackingnummer'])
+Viele Gruesse
+{Supportname}
+direktvomhersteller.de`,
+        placeholders: JSON.stringify(['Anrede', 'Nachname', 'Bestellnummer', 'Lieferdatum', 'Trackingnummer', 'Supportname'])
       },
       {
         id: 'tpl-2',
-        name: 'Reklamations-Eingangsbestaetigung',
+        name: 'Reklamation – Eingang bestaetigt',
         category: 'Reklamation',
-        subject: 'Ihre Reklamation {Ticketnummer} - Wir kuemmern uns darum',
-        content: `Guten Tag {Kundenname},
+        subject: 'Wir kuemmern uns – Reklamation {Ticketnummer}',
+        content: `Hallo {Anrede} {Nachname},
 
-vielen Dank fuer Ihre Nachricht. Wir haben Ihre Reklamation unter der Nummer {Ticketnummer} erfasst.
+wir haben Ihr Anliegen erhalten und kuemmern uns darum.
 
-Beschreibung des Problems:
-{Problembeschreibung}
+Ticketnummer: {Ticketnummer}
+Thema: {Problembeschreibung}
 
-Wir werden uns innerhalb von 24 Stunden bei Ihnen melden.
+Sie bekommen innerhalb von 24 Stunden eine Rueckmeldung von mir.
 
-Mit freundlichen Gruessen
-Ihr Support-Team`,
-        placeholders: JSON.stringify(['Kundenname', 'Ticketnummer', 'Problembeschreibung'])
+Viele Gruesse
+{Supportname}
+direktvomhersteller.de`,
+        placeholders: JSON.stringify(['Anrede', 'Nachname', 'Ticketnummer', 'Problembeschreibung', 'Supportname'])
       },
       {
         id: 'tpl-3',
         name: 'Zahlungserinnerung',
         category: 'Finanzen',
-        subject: 'Freundliche Zahlungserinnerung - Rechnung {Rechnungsnummer}',
-        content: `Guten Tag {Kundenname},
+        subject: 'Offene Rechnung {Rechnungsnummer} – kurze Erinnerung',
+        content: `Hallo {Anrede} {Nachname},
 
-bei der Durchsicht unserer Buchhaltung ist uns aufgefallen, dass die Rechnung {Rechnungsnummer} vom {Rechnungsdatum} ueber {Betrag} EUR noch offen ist.
+Rechnung {Rechnungsnummer} vom {Rechnungsdatum} ueber {Betrag} EUR ist noch offen.
 
-Sollte die Zahlung bereits erfolgt sein, betrachten Sie dieses Schreiben bitte als gegenstandslos.
+Falls die Zahlung bereits unterwegs ist – alles gut, dann koennen Sie diese Nachricht ignorieren.
 
-Mit freundlichen Gruessen
-Ihr Support-Team`,
-        placeholders: JSON.stringify(['Kundenname', 'Rechnungsnummer', 'Rechnungsdatum', 'Betrag'])
+Bei Rueckfragen bin ich direkt fuer Sie da.
+
+Viele Gruesse
+{Supportname}
+direktvomhersteller.de`,
+        placeholders: JSON.stringify(['Anrede', 'Nachname', 'Rechnungsnummer', 'Rechnungsdatum', 'Betrag', 'Supportname'])
+      },
+      {
+        id: 'tpl-4',
+        name: 'Lieferverzoegerung',
+        category: 'Versand',
+        subject: 'Kurze Info zu Ihrer Bestellung {Bestellnummer}',
+        content: `Hallo {Anrede} {Nachname},
+
+ich moechte Sie kurz informieren: Ihre Bestellung {Bestellnummer} verzoegert sich leider um {Verzoegerung}.
+
+Das neue voraussichtliche Lieferdatum: {NeuesLieferdatum}
+
+Wir arbeiten daran, dass Sie Ihr Produkt so schnell wie moeglich bekommen. Sie hoeren naechstens von mir.
+
+Viele Gruesse
+{Supportname}
+direktvomhersteller.de`,
+        placeholders: JSON.stringify(['Anrede', 'Nachname', 'Bestellnummer', 'Verzoegerung', 'NeuesLieferdatum', 'Supportname'])
+      },
+      {
+        id: 'tpl-5',
+        name: 'Auftragsbestaetigung',
+        category: 'Auftrag',
+        subject: 'Ihre Bestellung {Bestellnummer} ist eingegangen',
+        content: `Hallo {Anrede} {Nachname},
+
+Ihre Bestellung ist bei uns eingegangen – wir kuemmern uns darum.
+
+Bestellnummer: {Bestellnummer}
+Produkt: {Produktname}
+Lieferzeit: {Lieferzeit}
+
+Sie bekommen eine separate Benachrichtigung sobald Ihr Paket verschickt wird.
+
+Viele Gruesse
+{Supportname}
+direktvomhersteller.de`,
+        placeholders: JSON.stringify(['Anrede', 'Nachname', 'Bestellnummer', 'Produktname', 'Lieferzeit', 'Supportname'])
+      },
+      {
+        id: 'tpl-6',
+        name: 'Technische Frage beantworten',
+        category: 'Produktinfo',
+        subject: 'Antwort auf Ihre Anfrage',
+        content: `Hallo {Anrede} {Nachname},
+
+vielen Dank fuer Ihre Frage.
+
+{Antwort}
+
+Falls noch etwas unklar ist – melden Sie sich gerne direkt bei mir.
+
+Viele Gruesse
+{Supportname}
+direktvomhersteller.de`,
+        placeholders: JSON.stringify(['Anrede', 'Nachname', 'Antwort', 'Supportname'])
       }
     ]
 
@@ -196,6 +289,41 @@ Ihr Support-Team`,
         template.content,
         template.placeholders
       )
+    }
+  } else {
+    // Update existing templates to Black Book versions (upsert by id)
+    const upsertTemplate = db.prepare(`
+      INSERT OR REPLACE INTO templates (id, name, category, subject, content, placeholders, usage_count)
+      VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT usage_count FROM templates WHERE id = ?), 0))
+    `)
+    const blackBookTemplates = [
+      {
+        id: 'tpl-1',
+        name: 'Versandbestaetigung',
+        category: 'Versand',
+        subject: 'Ihre Bestellung {Bestellnummer} ist unterwegs',
+        content: `Hallo {Anrede} {Nachname},\n\nIhre Bestellung ist unterwegs – Sie bekommen Ihr Paket am {Lieferdatum}.\n\nBestellnummer: {Bestellnummer}\nTracking: {Trackingnummer}\n\nBei Fragen bin ich direkt fuer Sie erreichbar.\n\nViele Gruesse\n{Supportname}\ndirektVomHersteller.de`,
+        placeholders: JSON.stringify(['Anrede', 'Nachname', 'Bestellnummer', 'Lieferdatum', 'Trackingnummer', 'Supportname'])
+      },
+      {
+        id: 'tpl-2',
+        name: 'Reklamation – Eingang bestaetigt',
+        category: 'Reklamation',
+        subject: 'Wir kuemmern uns – Reklamation {Ticketnummer}',
+        content: `Hallo {Anrede} {Nachname},\n\nwir haben Ihr Anliegen erhalten und kuemmern uns darum.\n\nTicketnummer: {Ticketnummer}\nThema: {Problembeschreibung}\n\nSie bekommen innerhalb von 24 Stunden eine Rueckmeldung von mir.\n\nViele Gruesse\n{Supportname}\ndirektVomHersteller.de`,
+        placeholders: JSON.stringify(['Anrede', 'Nachname', 'Ticketnummer', 'Problembeschreibung', 'Supportname'])
+      },
+      {
+        id: 'tpl-3',
+        name: 'Zahlungserinnerung',
+        category: 'Finanzen',
+        subject: 'Offene Rechnung {Rechnungsnummer} – kurze Erinnerung',
+        content: `Hallo {Anrede} {Nachname},\n\nRechnung {Rechnungsnummer} vom {Rechnungsdatum} ueber {Betrag} EUR ist noch offen.\n\nFalls die Zahlung bereits unterwegs ist – alles gut, dann koennen Sie diese Nachricht ignorieren.\n\nBei Rueckfragen bin ich direkt fuer Sie da.\n\nViele Gruesse\n{Supportname}\ndirektVomHersteller.de`,
+        placeholders: JSON.stringify(['Anrede', 'Nachname', 'Rechnungsnummer', 'Rechnungsdatum', 'Betrag', 'Supportname'])
+      }
+    ]
+    for (const t of blackBookTemplates) {
+      upsertTemplate.run(t.id, t.name, t.category, t.subject, t.content, t.placeholders, t.id)
     }
   }
 

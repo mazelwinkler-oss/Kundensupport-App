@@ -12,6 +12,8 @@ import { webhooksRouter } from './routes/webhooks.js'
 import { aiSuggestionsRouter } from './routes/ai-suggestions.js'
 import { dailyPlanRouter } from './routes/daily-plan.js'
 import { emailRouter } from './routes/email.js'
+import { automationsRouter } from './routes/automations.js'
+import { chatbotRouter } from './routes/chatbot.js'
 import { startBackgroundJobs } from './services/sync.js'
 
 dotenv.config()
@@ -37,6 +39,8 @@ app.use('/api/webhooks', webhooksRouter)
 app.use('/api/ai-suggestions', aiSuggestionsRouter)
 app.use('/api/daily-plan', dailyPlanRouter)
 app.use('/api/email', emailRouter)
+app.use('/api/automations', automationsRouter)
+app.use('/api/chatbot', chatbotRouter)
 
 // Health check
 app.get('/api/health', (req, res) => {

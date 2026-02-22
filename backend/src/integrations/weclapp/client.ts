@@ -140,6 +140,38 @@ export class WeclappClient {
     return response.data.result || []
   }
 
+  // Create a comment/activity on a customer record (for E-Mail history)
+  async createCustomerComment(customerId: string, comment: string, subject?: string): Promise<void> {
+    try {
+      await this.client.post(`/customer/id/${customerId}/createComment`, {
+        comment,
+        subject: subject || 'Support-Nachricht'
+      })
+    } catch (error: any) {
+      console.error('Weclapp createCustomerComment failed:', error.response?.data || error.message)
+    }
+  }
+
+  // Get customer activities/comments for the history view
+  async getCustomerActivities(customerId: string): Promise<any[]> {
+    try {
+      const response = await this.client.get(`/customer/id/${customerId}/comments`)
+      return response.data?.result || []
+    } catch {
+      return []
+    }
+  }
+
+  // Get order comments/activities
+  async getOrderActivities(orderId: string): Promise<any[]> {
+    try {
+      const response = await this.client.get(`/salesOrder/id/${orderId}/comments`)
+      return response.data?.result || []
+    } catch {
+      return []
+    }
+  }
+
   async syncAll(types: string[]): Promise<Record<string, number>> {
     const results: Record<string, number> = {}
 
@@ -211,26 +243,35 @@ export class WeclappClient {
       'SELECT id FROM customers WHERE weclapp_id = ?'
     ).get(customer.id) as { id: string } | undefined
 
-    const name = customer.company ||
-      [customer.firstName, customer.lastName].filter(Boolean).join(' ') ||
-      'Unknown'
+    // Map all relevant Weclapp fields
+    const firstName = customer.firstName || customer.contacts?.[0]?.firstName || ''
+    const lastName = customer.lastName || customer.contacts?.[0]?.lastName || ''
+    const fullName = [firstName, lastName].filter(Boolean).join(' ')
+    const name = customer.company || fullName || 'Unbekannt'
 
-    const email = customer.email || customer.primaryAddress?.email
-    const phone = customer.phone || customer.primaryAddress?.phone
+    // Weclapp stores email/phone directly or in addresses
+    const email = customer.email ||
+      customer.contacts?.[0]?.email ||
+      customer.addresses?.[0]?.email || ''
+    const phone = customer.phone ||
+      customer.contacts?.[0]?.phone ||
+      customer.contacts?.[0]?.mobilePhone ||
+      customer.addresses?.[0]?.phone || ''
+    const company = customer.company || ''
 
     if (existing) {
       db.prepare(`
         UPDATE customers
         SET name = ?, email = ?, phone = ?, company = ?, updated_at = ?
         WHERE weclapp_id = ?
-      `).run(name, email, phone, customer.company, new Date().toISOString(), customer.id)
+      `).run(name, email, phone, company, new Date().toISOString(), customer.id)
       return existing.id
     } else {
       const id = randomUUID()
       db.prepare(`
         INSERT INTO customers (id, name, email, phone, company, weclapp_id, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, name, email, phone, customer.company, customer.id, new Date().toISOString(), new Date().toISOString())
+      `).run(id, name, email, phone, company, customer.id, new Date().toISOString(), new Date().toISOString())
       return id
     }
   }

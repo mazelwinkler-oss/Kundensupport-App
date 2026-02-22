@@ -5,6 +5,28 @@ import { db } from '../db/database.js'
 
 export const weclappRouter = Router()
 
+// Sync status – when was the last sync, how many records
+weclappRouter.get('/sync-status', (req, res) => {
+  try {
+    const lastSync = db.prepare(`
+      SELECT * FROM sync_log WHERE source = 'weclapp' ORDER BY started_at DESC LIMIT 1
+    `).get() as any
+
+    const customerCount = (db.prepare('SELECT COUNT(*) as c FROM customers WHERE weclapp_id IS NOT NULL').get() as any)?.c || 0
+    const taskCount = (db.prepare("SELECT COUNT(*) as c FROM tasks WHERE source = 'weclapp'").get() as any)?.c || 0
+
+    res.json({
+      lastSync: lastSync?.completed_at || null,
+      lastStatus: lastSync?.status || 'never',
+      customerCount,
+      taskCount,
+      isConfigured: !!(process.env.WECLAPP_API_TOKEN && process.env.WECLAPP_TENANT)
+    })
+  } catch (error: any) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // Test connection
 weclappRouter.get('/test', async (req, res) => {
   try {
