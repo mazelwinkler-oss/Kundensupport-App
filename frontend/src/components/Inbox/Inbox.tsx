@@ -70,50 +70,79 @@ export function Inbox() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-orange-200 bg-orange-50 p-6 space-y-4">
+        <div className="rounded-xl border border-orange-200 bg-orange-50 p-6 space-y-5">
           <div className="flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-orange-800">Microsoft Graph nicht verbunden</p>
+              <p className="font-semibold text-orange-800">E-Mail noch nicht verbunden</p>
               <p className="text-sm text-orange-700 mt-1">
-                Um den echten Posteingang zu sehen, trage diese 4 Werte in <code className="bg-orange-100 px-1 rounded">backend/.env</code> ein:
+                Trage die Google Workspace Service Account Daten in <code className="bg-orange-100 px-1 rounded">backend/.env</code> ein.
+                Danach siehst du hier deinen echten Posteingang.
               </p>
             </div>
           </div>
 
+          {/* .env values needed */}
           <div className="rounded-lg bg-white border border-orange-200 p-4 font-mono text-sm space-y-1">
-            <p className="text-gray-500"># backend/.env</p>
-            <p><span className="text-blue-600">MICROSOFT_TENANT_ID</span>=<span className="text-green-600">deine-tenant-id</span></p>
-            <p><span className="text-blue-600">MICROSOFT_CLIENT_ID</span>=<span className="text-green-600">deine-app-id</span></p>
-            <p><span className="text-blue-600">MICROSOFT_CLIENT_SECRET</span>=<span className="text-green-600">dein-secret</span></p>
-            <p><span className="text-blue-600">MICROSOFT_SENDER_EMAIL</span>=<span className="text-green-600">mail@direktvomhersteller.de</span></p>
+            <p className="text-gray-400"># backend/.env</p>
+            <p><span className="text-blue-600">GMAIL_USER_EMAIL</span>=<span className="text-green-600">mail@direktvomhersteller.de</span></p>
+            <p><span className="text-blue-600">GMAIL_SERVICE_ACCOUNT_KEY_FILE</span>=<span className="text-green-600">./service-account.json</span></p>
           </div>
 
+          {/* Step by step */}
           <div className="space-y-2 text-sm text-orange-800">
-            <p className="font-semibold">So bekommst du die Werte (5 Minuten):</p>
-            <ol className="list-decimal list-inside space-y-1 text-orange-700">
-              <li>Gehe zu <strong>portal.azure.com</strong> → „App-Registrierungen" → „Neue Registrierung"</li>
-              <li>Name: „Kundensupport App" → Registrieren</li>
-              <li><strong>MICROSOFT_CLIENT_ID</strong> = Anwendungs-ID (auf der Übersichtsseite)</li>
-              <li><strong>MICROSOFT_TENANT_ID</strong> = Verzeichnis-ID (auf der Übersichtsseite)</li>
-              <li>„Zertifikate &amp; Geheimnisse" → „Neuer geheimer Clientschlüssel" → Wert kopieren = <strong>MICROSOFT_CLIENT_SECRET</strong></li>
-              <li>„API-Berechtigungen" → „Berechtigung hinzufügen" → Microsoft Graph → Anwendungsberechtigungen:<br />
-                <code className="bg-orange-100 px-1 rounded">Mail.Read</code>, <code className="bg-orange-100 px-1 rounded">Mail.Send</code>, <code className="bg-orange-100 px-1 rounded">Mail.ReadWrite</code><br />
-                → „Administratorzustimmung erteilen" klicken
+            <p className="font-semibold">Einmalige Einrichtung (ca. 10 Minuten):</p>
+            <ol className="list-decimal list-inside space-y-2 text-orange-700">
+              <li>
+                <strong>Google Cloud Console</strong> öffnen → Projekt auswählen (oder neu erstellen)
+              </li>
+              <li>
+                <strong>Gmail API aktivieren:</strong> „APIs &amp; Dienste" → „Bibliothek" → „Gmail API" → Aktivieren
+              </li>
+              <li>
+                <strong>Service Account erstellen:</strong> „APIs &amp; Dienste" → „Anmeldedaten" → „Anmeldedaten erstellen" → „Dienstkonto"
+                <br />Name: <code className="bg-orange-100 px-1 rounded">kundensupport-app</code> → Erstellen
+              </li>
+              <li>
+                <strong>JSON-Schlüssel herunterladen:</strong> Auf das Dienstkonto klicken → „Schlüssel" → „Schlüssel hinzufügen" → JSON → Herunterladen
+                <br />→ Datei als <code className="bg-orange-100 px-1 rounded">service-account.json</code> in den Ordner <code className="bg-orange-100 px-1 rounded">backend/</code> legen
+              </li>
+              <li>
+                <strong>Domain-Wide Delegation aktivieren:</strong> Auf das Dienstkonto klicken → „Details bearbeiten" → „Domain-weite Delegation aktivieren" → Speichern
+                <br />→ <strong>Client-ID des Dienstkontos</strong> kopieren (sieht aus wie: <code className="bg-orange-100 px-1 rounded">123456789012345678901</code>)
+              </li>
+              <li>
+                <strong>Google Workspace Admin:</strong> <a href="https://admin.google.com/ac/owl/domainwidedelegation" target="_blank" rel="noopener noreferrer" className="underline">admin.google.com → Sicherheit → API-Steuerung → Domain-weite Delegierung</a>
+                <br />→ „Neu hinzufügen" → Client-ID einfügen → OAuth-Bereiche:
+                <br /><code className="bg-orange-100 px-1 rounded text-xs">https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/gmail.modify</code>
+              </li>
+              <li>
+                <code className="bg-orange-100 px-1 rounded">backend/.env</code> aktualisieren (siehe oben) → Backend neu starten
               </li>
             </ol>
           </div>
 
-          <a
-            href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 w-fit"
-          >
-            <Settings className="h-4 w-4" />
-            Azure Portal öffnen
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+          <div className="flex gap-3">
+            <a
+              href="https://console.cloud.google.com/apis/credentials"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              <Settings className="h-4 w-4" />
+              Google Cloud Console
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+            <a
+              href="https://admin.google.com/ac/owl/domainwidedelegation"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-lg border border-orange-300 bg-white px-4 py-2.5 text-sm font-medium text-orange-700 hover:bg-orange-50"
+            >
+              Google Workspace Admin
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
         </div>
       </div>
     )

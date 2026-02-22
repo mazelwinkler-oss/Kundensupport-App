@@ -3,6 +3,12 @@ import axios from 'axios'
 import { db } from '../db/database.js'
 import { randomUUID } from 'crypto'
 import { WeclappClient } from '../integrations/weclapp/client.js'
+import {
+  isGmailConfigured,
+  getInboxMessages,
+  sendGmailMessage,
+  markAsRead,
+} from '../integrations/gmail/client.js'
 
 export const emailRouter = Router()
 const weclappClient = new WeclappClient()
@@ -48,8 +54,20 @@ emailRouter.post('/send', async (req, res) => {
   let method: 'graph' | 'mailto' = 'mailto'
   let success = false
 
-  // Try Microsoft Graph
-  if (token) {
+  // Try Gmail first (if configured)
+  if (isGmailConfigured()) {
+    try {
+      await sendGmailMessage({ to, subject: subject || '(kein Betreff)', body })
+      method = 'graph' // reuse 'graph' to signal server-side send
+      success = true
+      console.log('[Email] Sent via Gmail')
+    } catch (error: any) {
+      console.error('[Email] Gmail send error:', error.message)
+    }
+  }
+
+  // Try Microsoft Graph (if Gmail not used)
+  if (!success && token) {
     try {
       await axios.post(
         `https://graph.microsoft.com/v1.0/users/${senderEmail}/sendMail`,
@@ -117,71 +135,107 @@ emailRouter.post('/send', async (req, res) => {
   return res.json({ success: false, method: 'mailto', mailtoLink })
 })
 
-// GET /api/email/status – check if Microsoft Graph is configured
+// GET /api/email/status – check which provider is configured
 emailRouter.get('/status', async (_req, res) => {
-  const configured = !!(
+  if (isGmailConfigured()) {
+    return res.json({ configured: true, method: 'gmail', provider: 'gmail' })
+  }
+  const graphConfigured = !!(
     process.env.MICROSOFT_TENANT_ID &&
     process.env.MICROSOFT_CLIENT_ID &&
     process.env.MICROSOFT_CLIENT_SECRET
   )
-  res.json({ configured, method: configured ? 'microsoft_graph' : 'mailto_fallback' })
+  res.json({
+    configured: graphConfigured,
+    method: graphConfigured ? 'microsoft_graph' : 'mailto_fallback',
+    provider: graphConfigured ? 'microsoft' : null,
+  })
 })
 
-// GET /api/email/inbox – real inbox from Microsoft Graph + match to customers
+// GET /api/email/inbox – inbox from Gmail or Microsoft Graph, matched to customers
 emailRouter.get('/inbox', async (_req, res) => {
+  // ── Gmail ──────────────────────────────────────────────────────────────
+  if (isGmailConfigured()) {
+    try {
+      const messages = await getInboxMessages(50)
+      const enriched = messages.map(msg => {
+        const customer = msg.from.address
+          ? db.prepare('SELECT id, name FROM customers WHERE email = ? COLLATE NOCASE')
+              .get(msg.from.address) as { id: string; name: string } | undefined
+          : undefined
+        return { ...msg, customerId: customer?.id, customerName: customer?.name, source: 'gmail' }
+      })
+      return res.json({ configured: true, provider: 'gmail', emails: enriched, total: enriched.length })
+    } catch (error: any) {
+      console.error('[Email] Gmail inbox error:', error.message)
+      return res.status(500).json({ error: 'Gmail Postfach konnte nicht geladen werden', details: error.message })
+    }
+  }
+
+  // ── Microsoft Graph ────────────────────────────────────────────────────
   const senderEmail = process.env.MICROSOFT_SENDER_EMAIL || 'mail@direktvomhersteller.de'
   const token = await getMicrosoftToken()
 
-  if (!token) {
-    return res.json({
-      configured: false,
-      message: 'Microsoft Graph nicht konfiguriert. Bitte MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID und MICROSOFT_CLIENT_SECRET in .env eintragen.',
-      emails: []
-    })
-  }
-
-  try {
-    // Fetch latest 50 messages from inbox
-    const response = await axios.get(
-      `https://graph.microsoft.com/v1.0/users/${senderEmail}/mailFolders/inbox/messages`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          $top: 50,
-          $orderby: 'receivedDateTime desc',
-          $select: 'id,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead,body'
+  if (token) {
+    try {
+      const response = await axios.get(
+        `https://graph.microsoft.com/v1.0/users/${senderEmail}/mailFolders/inbox/messages`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            $top: 50,
+            $orderby: 'receivedDateTime desc',
+            $select: 'id,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead,body',
+          },
         }
-      }
-    )
-
-    const messages = response.data.value || []
-
-    // Match each message to a customer in our DB by sender email
-    const enriched = messages.map((msg: any) => {
-      const senderAddr = msg.from?.emailAddress?.address || ''
-      const customer = senderAddr
-        ? db.prepare('SELECT id, name, weclapp_id FROM customers WHERE email = ? COLLATE NOCASE').get(senderAddr) as { id: string; name: string; weclapp_id: string } | undefined
-        : undefined
-
-      return {
-        id: msg.id,
-        subject: msg.subject,
-        from: msg.from?.emailAddress,
-        receivedAt: msg.receivedDateTime,
-        preview: msg.bodyPreview,
-        body: msg.body?.content || msg.bodyPreview,
-        isRead: msg.isRead,
-        customerId: customer?.id,
-        customerName: customer?.name,
-        source: 'microsoft_graph',
-      }
-    })
-
-    return res.json({ configured: true, emails: enriched, total: enriched.length })
-  } catch (error: any) {
-    console.error('[Email] Inbox fetch error:', error.response?.data || error.message)
-    return res.status(500).json({ error: 'Postfach konnte nicht geladen werden', details: error.response?.data })
+      )
+      const messages = response.data.value || []
+      const enriched = messages.map((msg: any) => {
+        const senderAddr = msg.from?.emailAddress?.address || ''
+        const customer = senderAddr
+          ? db.prepare('SELECT id, name FROM customers WHERE email = ? COLLATE NOCASE')
+              .get(senderAddr) as { id: string; name: string } | undefined
+          : undefined
+        return {
+          id: msg.id,
+          subject: msg.subject,
+          from: msg.from?.emailAddress,
+          receivedAt: msg.receivedDateTime,
+          preview: msg.bodyPreview,
+          body: msg.body?.content || msg.bodyPreview,
+          isRead: msg.isRead,
+          threadId: msg.id,
+          customerId: customer?.id,
+          customerName: customer?.name,
+          source: 'microsoft_graph',
+        }
+      })
+      return res.json({ configured: true, provider: 'microsoft', emails: enriched, total: enriched.length })
+    } catch (error: any) {
+      console.error('[Email] Graph inbox error:', error.response?.data || error.message)
+    }
   }
+
+  // ── Not configured ─────────────────────────────────────────────────────
+  return res.json({
+    configured: false,
+    provider: null,
+    message: 'Kein E-Mail-Provider konfiguriert.',
+    emails: [],
+  })
+})
+
+// POST /api/email/inbox/:id/read – mark message as read
+emailRouter.post('/inbox/:id/read', async (req, res) => {
+  if (isGmailConfigured()) {
+    try {
+      await markAsRead(req.params.id)
+      return res.json({ success: true })
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message })
+    }
+  }
+  res.json({ success: false, reason: 'not_configured' })
 })
 
 // GET /api/email/history/:customerId – sent emails + Weclapp activities
