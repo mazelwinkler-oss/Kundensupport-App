@@ -238,26 +238,63 @@ export class WeclappClient {
     return count
   }
 
+  // Create a minimal customer record from order address data when customer not yet synced
+  private async upsertCustomerFromOrder(order: any): Promise<string> {
+    const addr = order.deliveryAddress || order.invoiceAddress || order.recordAddress || {}
+    const firstName = (addr.firstName || '').trim()
+    const lastName = (addr.lastName || '').trim()
+    const name = [firstName, lastName].filter(Boolean).join(' ') || `Kunde ${order.customerNumber || order.customerId}`
+    const email = order.recordEmailAddresses?.toAddresses ||
+      order.deliveryEmailAddresses?.toAddresses || ''
+    const phone = addr.phoneNumber || addr.phone || ''
+
+    const existing = db.prepare(
+      'SELECT id FROM customers WHERE weclapp_id = ?'
+    ).get(order.customerId) as { id: string } | undefined
+
+    if (existing) return existing.id
+
+    const id = randomUUID()
+    db.prepare(`
+      INSERT INTO customers (id, name, email, phone, company, weclapp_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, email, phone, '', order.customerId,
+      new Date().toISOString(), new Date().toISOString())
+    return id
+  }
+
   private async upsertCustomer(customer: any): Promise<string> {
     const existing = db.prepare(
       'SELECT id FROM customers WHERE weclapp_id = ?'
     ).get(customer.id) as { id: string } | undefined
 
     // Map all relevant Weclapp fields
-    const firstName = customer.firstName || customer.contacts?.[0]?.firstName || ''
-    const lastName = customer.lastName || customer.contacts?.[0]?.lastName || ''
+    const primaryContact = customer.contacts?.[0]
+    const firstName = (customer.firstName || primaryContact?.firstName || '').trim()
+    const lastName = (customer.lastName || primaryContact?.lastName || '').trim()
     const fullName = [firstName, lastName].filter(Boolean).join(' ')
-    const name = customer.company || fullName || 'Unbekannt'
+    const name = (customer.company || fullName || `Kunde ${customer.customerNumber || customer.id}`).trim()
 
-    // Weclapp stores email/phone directly or in addresses
-    const email = customer.email ||
-      customer.contacts?.[0]?.email ||
+    // Email: direct field, then contact, then invoice address
+    const email = (
+      customer.email ||
+      primaryContact?.email ||
+      customer.invoiceAddress?.email ||
+      customer.addresses?.find((a: any) => a.primeAddress)?.email ||
       customer.addresses?.[0]?.email || ''
-    const phone = customer.phone ||
-      customer.contacts?.[0]?.phone ||
-      customer.contacts?.[0]?.mobilePhone ||
-      customer.addresses?.[0]?.phone || ''
-    const company = customer.company || ''
+    ).trim()
+
+    // Phone: direct field, then contact (phone/mobile), then address
+    const phone = (
+      customer.phone ||
+      primaryContact?.phone ||
+      primaryContact?.mobilePhone ||
+      customer.invoiceAddress?.phoneNumber ||
+      customer.addresses?.find((a: any) => a.primeAddress)?.phoneNumber ||
+      customer.addresses?.[0]?.phoneNumber || ''
+    ).trim()
+
+    const company = (customer.company || '').trim()
 
     if (existing) {
       db.prepare(`
@@ -281,25 +318,48 @@ export class WeclappClient {
       'SELECT id FROM tasks WHERE external_id = ? AND source = ?'
     ).get(order.id, 'weclapp') as { id: string } | undefined
 
-    // Find or create customer
+    // Find customer in SQLite – or create from order address data if missing
     let customerId: string | undefined
     if (order.customerId) {
-      const customer = db.prepare(
+      const customerInDb = db.prepare(
         'SELECT id FROM customers WHERE weclapp_id = ?'
       ).get(order.customerId) as { id: string } | undefined
-      customerId = customer?.id
+
+      if (customerInDb) {
+        customerId = customerInDb.id
+      } else {
+        // Customer not yet synced – create minimal record from order address data
+        customerId = await this.upsertCustomerFromOrder(order)
+      }
     }
 
     const title = `Auftrag ${order.orderNumber || order.id}`
     const priority = this.mapOrderPriority(order)
-    const status = this.mapOrderStatus(order.salesOrderStatus)
+    const status = this.mapOrderStatus(order.salesOrderStatus || order.status)
+
+    // Extract customer contact data from order for metadata
+    const addr = order.deliveryAddress || order.invoiceAddress || order.recordAddress || {}
+    const customerEmail = order.recordEmailAddresses?.toAddresses ||
+      order.deliveryEmailAddresses?.toAddresses || ''
+    const customerPhone = addr.phoneNumber || addr.phone || ''
+    const customerName = [addr.firstName, addr.lastName].filter(Boolean).join(' ').trim() ||
+      order.customerName || ''
 
     const metadata = {
       orderNumber: order.orderNumber,
-      totalAmount: order.netAmountInCompanyCurrency,
-      currency: order.currency?.name || 'EUR',
+      totalAmount: order.netAmountInCompanyCurrency || order.grossAmountInCompanyCurrency,
+      currency: order.recordCurrencyName || order.currency?.name || 'EUR',
       items: order.orderItems?.length || 0,
-      shippingStatus: order.shippingStatus
+      shippingStatus: order.shippingStatus,
+      weclappCustomerId: order.customerId,
+      customerEmail,
+      customerPhone,
+      customerName,
+      status: order.salesOrderStatus || order.status,
+      paymentMethod: order.paymentMethodName,
+      plannedShippingDate: order.plannedShippingDate
+        ? new Date(order.plannedShippingDate).toISOString()
+        : undefined,
     }
 
     if (existing) {
