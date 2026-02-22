@@ -1,18 +1,43 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Sidebar } from './components/Layout/Sidebar'
+import { Today } from './components/Today/Today'
 import { Dashboard } from './components/Dashboard/Dashboard'
 import { TaskList } from './components/TaskList/TaskList'
 import { CustomerView } from './components/CustomerView/CustomerView'
 import { TemplateList } from './components/Templates/TemplateList'
-import { TaskDetail } from './components/TaskDetail/TaskDetail'
 import { DailyPlan } from './components/DailyPlan/DailyPlan'
-import { Bell, Search, User } from 'lucide-react'
+import { AutomationSuggestions } from './components/Automations/AutomationSuggestions'
+import { ChatBot } from './components/Chatbot/ChatBot'
+import { ChatbotTraining } from './components/Settings/ChatbotTraining'
+import { TaskDetailFull } from './components/TaskDetail/TaskDetailFull'
+import { Search, Wifi, WifiOff } from 'lucide-react'
+import { api } from './services/api'
 import type { Task } from './services/unified'
 
+interface SyncStatus {
+  isConfigured: boolean
+  lastSync?: string
+  lastStatus?: string
+  customerCount?: number
+}
+
 function App() {
-  const [currentPage, setCurrentPage] = useState('dashboard')
+  const [currentPage, setCurrentPage] = useState('today')
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
+
+  // Load Weclapp sync status for header indicator
+  useEffect(() => {
+    api.get('/weclapp/sync-status')
+      .then(r => setSyncStatus(r.data))
+      .catch(() => {})
+    // Refresh every 5 min
+    const interval = setInterval(() => {
+      api.get('/weclapp/sync-status').then(r => setSyncStatus(r.data)).catch(() => {})
+    }, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   const handleTaskClick = useCallback((task: Task) => {
     setSelectedTask(task)
@@ -25,48 +50,44 @@ function App() {
   }, [])
 
   const handleTaskStatusChange = useCallback(() => {
-    // Refresh will happen via re-render
     setIsTaskDetailOpen(false)
     setSelectedTask(null)
   }, [])
 
   const renderPage = () => {
     switch (currentPage) {
+      case 'today':
+        return <Today />
       case 'dashboard':
         return <Dashboard onTaskClick={handleTaskClick} />
       case 'daily-plan':
         return <DailyPlan />
       case 'tasks':
         return <TaskList onTaskClick={handleTaskClick} />
+      case 'orders':
+        return <TaskList onTaskClick={handleTaskClick} />
       case 'customers':
         return <CustomerView />
       case 'templates':
         return <TemplateList />
-      case 'analytics':
-        return (
-          <div className="text-center py-12 text-gray-500">
-            <p className="text-lg font-medium">Analyse</p>
-            <p className="text-sm">Kommt bald...</p>
-          </div>
-        )
       case 'automations':
-        return (
-          <div className="text-center py-12 text-gray-500">
-            <p className="text-lg font-medium">Automatisierung</p>
-            <p className="text-sm">n8n-Integration in Entwicklung...</p>
-          </div>
-        )
+        return <AutomationSuggestions />
       case 'settings':
         return (
-          <div className="text-center py-12 text-gray-500">
-            <p className="text-lg font-medium">Einstellungen</p>
-            <p className="text-sm">API-Konfiguration in Entwicklung...</p>
+          <div className="space-y-8 max-w-3xl">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Einstellungen</h1>
+              <p className="text-sm text-gray-500 mt-0.5">Konfiguration und Chatbot-Training</p>
+            </div>
+            <ChatbotTraining />
           </div>
         )
       default:
-        return <Dashboard />
+        return <Today />
     }
   }
+
+  const syncOk = syncStatus?.isConfigured && syncStatus.lastStatus === 'success'
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -74,38 +95,43 @@ function App() {
       <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
 
       {/* Main Content */}
-      <div className="pl-64">
+      <div className="pl-56">
         {/* Header */}
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-white px-6">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-white px-6 gap-4">
           {/* Search */}
-          <div className="relative w-96">
+          <div className="relative w-80">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Suchen nach Kunden, Aufgaben, Bestellungen..."
-              className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="Kunden, Aufgaben, Bestellungen..."
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 py-1.5 pl-9 pr-4 text-sm focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
           {/* Right side */}
-          <div className="flex items-center gap-4">
-            {/* Notifications */}
-            <button className="relative rounded-full p-2 hover:bg-gray-100">
-              <Bell className="h-5 w-5 text-gray-600" />
-              <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
-                3
-              </span>
-            </button>
+          <div className="flex items-center gap-3">
+            {/* Weclapp sync status */}
+            {syncStatus && (
+              <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                syncOk ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'
+              }`}>
+                {syncOk
+                  ? <Wifi className="h-3.5 w-3.5" />
+                  : <WifiOff className="h-3.5 w-3.5" />}
+                <span>
+                  {syncOk
+                    ? `Weclapp sync${syncStatus.customerCount ? ` · ${syncStatus.customerCount} Kunden` : ''}`
+                    : 'Weclapp nicht verbunden'}
+                </span>
+              </div>
+            )}
 
-            {/* User */}
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">Max Mazel</p>
-                <p className="text-xs text-gray-500">Support Manager</p>
+            {/* User badge */}
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white text-sm font-bold">
+                M
               </div>
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-                <User className="h-5 w-5" />
-              </div>
+              <span className="text-sm font-medium text-gray-700">Marcel</span>
             </div>
           </div>
         </header>
@@ -116,13 +142,16 @@ function App() {
         </main>
       </div>
 
-      {/* Task Detail Modal */}
-      <TaskDetail
+      {/* Global Task Detail (used by TaskList / Dashboard) */}
+      <TaskDetailFull
         task={selectedTask}
         isOpen={isTaskDetailOpen}
         onClose={handleTaskDetailClose}
         onStatusChange={handleTaskStatusChange}
       />
+
+      {/* Global ChatBot Widget – always visible */}
+      <ChatBot />
     </div>
   )
 }
