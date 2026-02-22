@@ -1,0 +1,141 @@
+{
+  "name": "E-Mail zu HubSpot Ticket",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email-to-ticket",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Email Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "email-to-ticket"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 1,
+        "filters": {
+          "email": "={{ $json.from }}"
+        }
+      },
+      "id": "hubspot-search",
+      "name": "Kontakt suchen",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "your-hubspot-credentials",
+          "name": "HubSpot Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "additionalFields": {
+          "subject": "={{ $json.subject }}",
+          "content": "={{ $json.body }}",
+          "hs_ticket_priority": "MEDIUM",
+          "hs_pipeline": "support",
+          "hs_pipeline_stage": "1"
+        }
+      },
+      "id": "create-ticket",
+      "name": "Ticket erstellen",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "your-hubspot-credentials",
+          "name": "HubSpot Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/webhooks/task",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ 'Neues Ticket: ' + $json.subject }}"
+            },
+            {
+              "name": "source",
+              "value": "hubspot"
+            },
+            {
+              "name": "type",
+              "value": "ticket"
+            },
+            {
+              "name": "priority",
+              "value": "normal"
+            },
+            {
+              "name": "customerEmail",
+              "value": "={{ $json.from }}"
+            },
+            {
+              "name": "externalId",
+              "value": "={{ $json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-zentrale",
+      "name": "Support-Zentrale benachrichtigen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Email Webhook": {
+      "main": [
+        [
+          {
+            "node": "Kontakt suchen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kontakt suchen": {
+      "main": [
+        [
+          {
+            "node": "Ticket erstellen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticket erstellen": {
+      "main": [
+        [
+          {
+            "node": "Support-Zentrale benachrichtigen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

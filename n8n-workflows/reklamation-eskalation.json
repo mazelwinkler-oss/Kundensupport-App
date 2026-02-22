@@ -1,0 +1,179 @@
+{
+  "name": "Reklamation Eskalation nach 3 Tagen",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Taeglich 8 Uhr",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:3001/api/tasks",
+        "qs": {
+          "source": "hubspot",
+          "type": "ticket",
+          "status": "open"
+        },
+        "options": {}
+      },
+      "id": "get-open-tickets",
+      "name": "Offene Tickets abrufen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "dateTime": [
+            {
+              "value1": "={{ $json.createdAt }}",
+              "operation": "before",
+              "value2": "={{ $now.minus({days: 3}).toISO() }}"
+            }
+          ]
+        }
+      },
+      "id": "filter-old-tickets",
+      "name": "Aelter als 3 Tage?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'http://localhost:3001/api/tasks/' + $json.id }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "priority",
+              "value": "urgent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "escalate-priority",
+      "name": "Prioritaet erhoehen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "support@ihre-firma.de",
+        "toEmail": "manager@ihre-firma.de",
+        "subject": "Eskalation: Reklamation seit 3 Tagen offen",
+        "text": "Die folgende Reklamation ist seit mehr als 3 Tagen ohne Bearbeitung:\n\nTicket: {{ $json.title }}\nKunde: {{ $json.customerName }}\nErstellt am: {{ $json.createdAt }}\n\nBitte pruefen Sie den Status.",
+        "options": {}
+      },
+      "id": "send-escalation-email",
+      "name": "Eskalations-E-Mail",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "credentials": {
+        "smtp": {
+          "id": "your-smtp-credentials",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "ticketId": "={{ $json.externalId }}",
+        "updateFields": {
+          "hs_ticket_priority": "HIGH",
+          "content": "={{ $json.description + '\\n\\n[ESKALIERT: Keine Bearbeitung seit 3 Tagen]' }}"
+        }
+      },
+      "id": "update-hubspot-ticket",
+      "name": "HubSpot Ticket aktualisieren",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "your-hubspot-credentials",
+          "name": "HubSpot Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Taeglich 8 Uhr": {
+      "main": [
+        [
+          {
+            "node": "Offene Tickets abrufen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offene Tickets abrufen": {
+      "main": [
+        [
+          {
+            "node": "Aelter als 3 Tage?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aelter als 3 Tage?": {
+      "main": [
+        [
+          {
+            "node": "Prioritaet erhoehen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prioritaet erhoehen": {
+      "main": [
+        [
+          {
+            "node": "Eskalations-E-Mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eskalations-E-Mail": {
+      "main": [
+        [
+          {
+            "node": "HubSpot Ticket aktualisieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

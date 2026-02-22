@@ -1,0 +1,145 @@
+{
+  "name": "Versandbestaetigung automatisch senden",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shipment-created",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Weclapp Shipment Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "shipment-webhook"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'http://localhost:3001/api/weclapp/orders/' + $json.salesOrderId }}",
+        "options": {}
+      },
+      "id": "get-order",
+      "name": "Auftragsdaten abrufen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/templates/tpl-1/apply",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "variables",
+              "value": "={{ { 'Kundenname': $json.customerName, 'Bestellnummer': $json.orderNumber, 'Lieferdatum': $json.estimatedDeliveryDate, 'Trackingnummer': $json.trackingNumber } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "apply-template",
+      "name": "Vorlage anwenden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "support@ihre-firma.de",
+        "toEmail": "={{ $json.customerEmail }}",
+        "subject": "={{ $json.subject }}",
+        "text": "={{ $json.content }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "E-Mail senden",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "credentials": {
+        "smtp": {
+          "id": "your-smtp-credentials",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/webhooks/pattern",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "patternType",
+              "value": "shipping_confirmation"
+            },
+            {
+              "name": "metadata",
+              "value": "={{ { 'orderId': $json.orderId, 'automated': true } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "track-pattern",
+      "name": "Muster tracken",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Weclapp Shipment Webhook": {
+      "main": [
+        [
+          {
+            "node": "Auftragsdaten abrufen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auftragsdaten abrufen": {
+      "main": [
+        [
+          {
+            "node": "Vorlage anwenden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vorlage anwenden": {
+      "main": [
+        [
+          {
+            "node": "E-Mail senden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E-Mail senden": {
+      "main": [
+        [
+          {
+            "node": "Muster tracken",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

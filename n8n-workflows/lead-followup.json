@@ -1,0 +1,206 @@
+{
+  "name": "Lead Follow-up Erinnerung",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Taeglich 9 Uhr",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "propertyName": "dealstage",
+          "value": "qualifiedtobuy"
+        },
+        "additionalFilters": {
+          "lastActivityDate": {
+            "searchTerm": "LESS_THAN",
+            "value": "={{ $today.minus({days: 2}).toISODate() }}"
+          }
+        }
+      },
+      "id": "get-stale-deals",
+      "name": "Inaktive Leads abrufen",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "your-hubspot-credentials",
+          "name": "HubSpot Account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "split-items",
+      "name": "Pro Lead aufteilen",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/webhooks/task",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ 'Follow-up: ' + $json.properties.dealname }}"
+            },
+            {
+              "name": "description",
+              "value": "Dieser Lead hatte seit 2 Tagen keine Aktivitaet. Bitte Follow-up durchfuehren."
+            },
+            {
+              "name": "source",
+              "value": "hubspot"
+            },
+            {
+              "name": "type",
+              "value": "lead"
+            },
+            {
+              "name": "priority",
+              "value": "high"
+            },
+            {
+              "name": "externalId",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "metadata",
+              "value": "={{ { 'dealValue': $json.properties.amount, 'lastActivity': $json.properties.notes_last_updated } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-followup-task",
+      "name": "Follow-up Aufgabe erstellen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.properties.hubspot_owner_id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-owner",
+      "name": "Hat Besitzer?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "taskType": "TODO",
+        "associations": {
+          "dealIds": ["={{ $json.id }}"]
+        },
+        "additionalFields": {
+          "subject": "Follow-up mit Lead",
+          "body": "Dieser Lead hatte seit 2 Tagen keine Aktivitaet.",
+          "hs_task_priority": "HIGH",
+          "hs_timestamp": "={{ $now.plus({hours: 2}).toMillis() }}"
+        }
+      },
+      "id": "create-hubspot-task",
+      "name": "HubSpot Task erstellen",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1250, 200],
+      "credentials": {
+        "hubspotApi": {
+          "id": "your-hubspot-credentials",
+          "name": "HubSpot Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Taeglich 9 Uhr": {
+      "main": [
+        [
+          {
+            "node": "Inaktive Leads abrufen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inaktive Leads abrufen": {
+      "main": [
+        [
+          {
+            "node": "Pro Lead aufteilen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pro Lead aufteilen": {
+      "main": [
+        [
+          {
+            "node": "Follow-up Aufgabe erstellen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-up Aufgabe erstellen": {
+      "main": [
+        [
+          {
+            "node": "Hat Besitzer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hat Besitzer?": {
+      "main": [
+        [
+          {
+            "node": "HubSpot Task erstellen",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
