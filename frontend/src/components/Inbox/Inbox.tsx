@@ -74,9 +74,9 @@ export function Inbox() {
           <div className="flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-orange-800">E-Mail noch nicht verbunden</p>
+              <p className="font-semibold text-orange-800">Gmail noch nicht verbunden</p>
               <p className="text-sm text-orange-700 mt-1">
-                Trage die Google Workspace Service Account Daten in <code className="bg-orange-100 px-1 rounded">backend/.env</code> ein.
+                Einmalige Einrichtung via OAuth2 – kein Service Account nötig.
                 Danach siehst du hier deinen echten Posteingang.
               </p>
             </div>
@@ -85,13 +85,15 @@ export function Inbox() {
           {/* .env values needed */}
           <div className="rounded-lg bg-white border border-orange-200 p-4 font-mono text-sm space-y-1">
             <p className="text-gray-400"># backend/.env</p>
+            <p><span className="text-blue-600">GOOGLE_CLIENT_ID</span>=<span className="text-gray-400">{'<deine-oauth2-client-id>'}</span></p>
+            <p><span className="text-blue-600">GOOGLE_CLIENT_SECRET</span>=<span className="text-gray-400">{'<dein-oauth2-client-secret>'}</span></p>
+            <p><span className="text-blue-600">GMAIL_REFRESH_TOKEN</span>=<span className="text-gray-400">{'<nach Setup-Skript>'}</span></p>
             <p><span className="text-blue-600">GMAIL_USER_EMAIL</span>=<span className="text-green-600">mail@direktvomhersteller.de</span></p>
-            <p><span className="text-blue-600">GMAIL_SERVICE_ACCOUNT_KEY_FILE</span>=<span className="text-green-600">./service-account.json</span></p>
           </div>
 
           {/* Step by step */}
           <div className="space-y-2 text-sm text-orange-800">
-            <p className="font-semibold">Einmalige Einrichtung (ca. 10 Minuten):</p>
+            <p className="font-semibold">Einmalige Einrichtung (ca. 5 Minuten):</p>
             <ol className="list-decimal list-inside space-y-2 text-orange-700">
               <li>
                 <strong>Google Cloud Console</strong> öffnen → Projekt auswählen (oder neu erstellen)
@@ -100,24 +102,18 @@ export function Inbox() {
                 <strong>Gmail API aktivieren:</strong> „APIs &amp; Dienste" → „Bibliothek" → „Gmail API" → Aktivieren
               </li>
               <li>
-                <strong>Service Account erstellen:</strong> „APIs &amp; Dienste" → „Anmeldedaten" → „Anmeldedaten erstellen" → „Dienstkonto"
-                <br />Name: <code className="bg-orange-100 px-1 rounded">kundensupport-app</code> → Erstellen
+                <strong>OAuth2 Client ID erstellen:</strong> „APIs &amp; Dienste" → „Anmeldedaten" → „Anmeldedaten erstellen" → „OAuth 2.0-Client-ID"
+                <br />Typ: <strong>Webanwendung</strong> → Authorized Redirect URI: <code className="bg-orange-100 px-1 rounded">http://localhost:3000/oauth2callback</code>
+                <br />→ <code className="bg-orange-100 px-1 rounded">GOOGLE_CLIENT_ID</code> und <code className="bg-orange-100 px-1 rounded">GOOGLE_CLIENT_SECRET</code> in <code className="bg-orange-100 px-1 rounded">backend/.env</code> eintragen
               </li>
               <li>
-                <strong>JSON-Schlüssel herunterladen:</strong> Auf das Dienstkonto klicken → „Schlüssel" → „Schlüssel hinzufügen" → JSON → Herunterladen
-                <br />→ Datei als <code className="bg-orange-100 px-1 rounded">service-account.json</code> in den Ordner <code className="bg-orange-100 px-1 rounded">backend/</code> legen
+                <strong>Setup-Skript ausführen</strong> im <code className="bg-orange-100 px-1 rounded">backend/</code> Ordner:
+                <br /><code className="bg-orange-100 px-1 rounded">npx tsx src/setup-gmail-oauth.ts</code>
+                <br />→ Browser öffnet sich → Mit mail@direktvomhersteller.de anmelden → Berechtigung erteilen
+                <br />→ Refresh Token wird im Terminal angezeigt → als <code className="bg-orange-100 px-1 rounded">GMAIL_REFRESH_TOKEN</code> in <code className="bg-orange-100 px-1 rounded">backend/.env</code> eintragen
               </li>
               <li>
-                <strong>Domain-Wide Delegation aktivieren:</strong> Auf das Dienstkonto klicken → „Details bearbeiten" → „Domain-weite Delegation aktivieren" → Speichern
-                <br />→ <strong>Client-ID des Dienstkontos</strong> kopieren (sieht aus wie: <code className="bg-orange-100 px-1 rounded">123456789012345678901</code>)
-              </li>
-              <li>
-                <strong>Google Workspace Admin:</strong> <a href="https://admin.google.com/ac/owl/domainwidedelegation" target="_blank" rel="noopener noreferrer" className="underline">admin.google.com → Sicherheit → API-Steuerung → Domain-weite Delegierung</a>
-                <br />→ „Neu hinzufügen" → Client-ID einfügen → OAuth-Bereiche:
-                <br /><code className="bg-orange-100 px-1 rounded text-xs">https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/gmail.modify</code>
-              </li>
-              <li>
-                <code className="bg-orange-100 px-1 rounded">backend/.env</code> aktualisieren (siehe oben) → Backend neu starten
+                Backend neu starten: <code className="bg-orange-100 px-1 rounded">npm run dev</code>
               </li>
             </ol>
           </div>
@@ -131,15 +127,6 @@ export function Inbox() {
             >
               <Settings className="h-4 w-4" />
               Google Cloud Console
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-            <a
-              href="https://admin.google.com/ac/owl/domainwidedelegation"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-lg border border-orange-300 bg-white px-4 py-2.5 text-sm font-medium text-orange-700 hover:bg-orange-50"
-            >
-              Google Workspace Admin
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>

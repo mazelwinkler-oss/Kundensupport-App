@@ -1,12 +1,16 @@
 /**
- * Gmail integration via Google Service Account + Domain-Wide Delegation
+ * Gmail integration via OAuth2 Refresh Token
  * Reads inbox and sends emails on behalf of mail@direktvomhersteller.de
- * No OAuth redirect needed – works fully server-side.
+ *
+ * Setup (one-time):
+ * 1. Create OAuth2 Client ID in Google Cloud Console (type: Web Application)
+ * 2. Add redirect URI: http://localhost:3000/oauth2callback
+ * 3. Add GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET to .env
+ * 4. Run: npx tsx src/setup-gmail-oauth.ts
+ * 5. Add GMAIL_REFRESH_TOKEN to .env
  */
 
 import { google } from 'googleapis'
-import * as fs from 'fs'
-import * as path from 'path'
 
 export interface GmailMessage {
   id: string
@@ -19,56 +23,25 @@ export interface GmailMessage {
   threadId: string
 }
 
-function getServiceAccountCredentials(): object | null {
-  // Option 1: path to JSON key file
-  const keyFile = process.env.GMAIL_SERVICE_ACCOUNT_KEY_FILE
-  if (keyFile) {
-    try {
-      const resolved = path.isAbsolute(keyFile)
-        ? keyFile
-        : path.join(process.cwd(), keyFile)
-      return JSON.parse(fs.readFileSync(resolved, 'utf8'))
-    } catch (e: any) {
-      console.error('[Gmail] Could not read key file:', e.message)
-    }
-  }
-
-  // Option 2: inline JSON in env var
-  const keyJson = process.env.GMAIL_SERVICE_ACCOUNT_KEY_JSON
-  if (keyJson) {
-    try {
-      return JSON.parse(keyJson)
-    } catch (e: any) {
-      console.error('[Gmail] Could not parse GMAIL_SERVICE_ACCOUNT_KEY_JSON:', e.message)
-    }
-  }
-
-  return null
-}
-
 export function isGmailConfigured(): boolean {
   return !!(
-    (process.env.GMAIL_SERVICE_ACCOUNT_KEY_FILE || process.env.GMAIL_SERVICE_ACCOUNT_KEY_JSON) &&
+    process.env.GOOGLE_CLIENT_ID &&
+    process.env.GOOGLE_CLIENT_SECRET &&
+    process.env.GMAIL_REFRESH_TOKEN &&
     process.env.GMAIL_USER_EMAIL
   )
 }
 
-function getAuthClient(userEmail: string) {
-  const credentials = getServiceAccountCredentials()
-  if (!credentials) throw new Error('Gmail Service Account credentials not found')
-
-  const auth = new google.auth.GoogleAuth({
-    credentials: credentials as any,
-    scopes: [
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/gmail.send',
-      'https://www.googleapis.com/auth/gmail.modify',
-    ],
-    clientOptions: {
-      subject: userEmail, // impersonate this user (Domain-Wide Delegation)
-    },
+function getOAuth2Client() {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    'http://localhost:3000/oauth2callback'
+  )
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GMAIL_REFRESH_TOKEN,
   })
-  return auth
+  return oauth2Client
 }
 
 function decodeBase64Url(str: string): string {
@@ -112,9 +85,8 @@ function parseEmailAddress(raw: string): { name?: string; address: string } {
 }
 
 export async function getInboxMessages(maxResults = 50): Promise<GmailMessage[]> {
-  const userEmail = process.env.GMAIL_USER_EMAIL!
-  const auth = getAuthClient(userEmail)
-  const gmail = google.gmail({ version: 'v1', auth: await auth.getClient() as any })
+  const auth = getOAuth2Client()
+  const gmail = google.gmail({ version: 'v1', auth })
 
   // List messages in inbox
   const listRes = await gmail.users.messages.list({
@@ -126,7 +98,7 @@ export async function getInboxMessages(maxResults = 50): Promise<GmailMessage[]>
   const messageIds = listRes.data.messages || []
   if (messageIds.length === 0) return []
 
-  // Fetch each message in parallel (batched)
+  // Fetch each message in parallel
   const messages = await Promise.all(
     messageIds.map(async ({ id }) => {
       try {
@@ -171,8 +143,8 @@ export async function sendGmailMessage(params: {
   replyToMessageId?: string
 }): Promise<void> {
   const userEmail = process.env.GMAIL_USER_EMAIL!
-  const auth = getAuthClient(userEmail)
-  const gmail = google.gmail({ version: 'v1', auth: await auth.getClient() as any })
+  const auth = getOAuth2Client()
+  const gmail = google.gmail({ version: 'v1', auth })
 
   const mimeLines = [
     `From: ${userEmail}`,
@@ -197,9 +169,8 @@ export async function sendGmailMessage(params: {
 }
 
 export async function markAsRead(messageId: string): Promise<void> {
-  const userEmail = process.env.GMAIL_USER_EMAIL!
-  const auth = getAuthClient(userEmail)
-  const gmail = google.gmail({ version: 'v1', auth: await auth.getClient() as any })
+  const auth = getOAuth2Client()
+  const gmail = google.gmail({ version: 'v1', auth })
   await gmail.users.messages.modify({
     userId: 'me',
     id: messageId,

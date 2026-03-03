@@ -11,3 +11,6 @@ service-account.json
 *-service-account.json
 service_account*.json
 google-credentials*.json
+
+# Google OAuth2 client secret – NEVER commit this!
+client_secret*.json
