@@ -938,6 +938,122 @@ Ticketnummer: {Ticketnummer}`,
     insertSeqTemplate.run(t.id, t.name, t.category, t.subject, t.content, t.placeholders)
   }
 
+  // ─── POA-Angebotstemplate (Psychologisch Optimiertes Angebot, Black Book) ──
+  insertSeqTemplate.run(
+    'angebot-poa',
+    'POA-Angebot – Persönliche Empfehlung nach Beratungsgespräch',
+    'Angebot',
+    'Ihre persönliche Whirlpool-Empfehlung – {Vorname} {Nachname}',
+    `Hallo {Anrede} {Nachname},
+
+schön, dass wir heute sprechen konnten.
+
+Ich habe mir alles notiert – und ich möchte Ihnen zeigen, dass ich wirklich zugehört habe.
+
+════════════════════════════════════════
+IHRE SITUATION
+════════════════════════════════════════
+
+{AusgangssituationKunde}
+
+Das ist der Ausgangspunkt. Und genau darauf basiert alles, was ich Ihnen gleich empfehle.
+
+════════════════════════════════════════
+IHR ZIEL
+════════════════════════════════════════
+
+Was Sie wirklich möchten: {KundenzielHauptwunsch}
+
+Das ist mein Ziel für Sie. Nicht irgendein Whirlpool – sondern genau der, der das für Sie erfüllt.
+
+════════════════════════════════════════
+WARUM SIE BEI UNS RICHTIG SIND
+════════════════════════════════════════
+
+Bekannt aus Atrium, Bellevue, Traumbäder und Mein Spa.
+Vertraut von hunderten Kunden in Deutschland, Österreich und der Schweiz – direkt vom Hersteller, ohne Aufschlag.
+
+Was das für Sie bedeutet:
+
+→ Trusted Shop-Käuferschutz bis 20.000 €
+   Ihre Investition ist vollständig abgesichert.
+
+→ 3 Jahre Garantie + deutschlandweiter Kundendienst
+   Wir sind da – auch nach der Lieferung.
+
+→ 30 Tage Widerrufsrecht
+   Kein Risiko. Kein Wenn und Aber.
+
+→ Lieferung frei Haus (DE, AT, CH)
+   Bis an Ihre Türschwelle, nach Terminabsprache.
+
+════════════════════════════════════════
+MEINE PERSÖNLICHE EMPFEHLUNG
+════════════════════════════════════════
+
+Nach unserem Gespräch empfehle ich Ihnen:
+
+  {Produkt}
+  mit {Whirlsystem}-System
+
+Warum genau dieses Modell für Sie:
+{IndividuelleBegründung}
+
+Was Sie erwartet:
+{BildspracheNutzen}
+
+Ihr Ablauf nach der Entscheidung:
+
+  ① Bestellung & schriftliche Auftragsbestätigung (heute)
+  ② Fertigung & Qualitätsprüfung
+  ③ Lieferung frei Haus – {Lieferzeit}
+  ④ Anschluss durch Ihren Sanitär-Fachbetrieb
+  ⑤ Erster Abend im eigenen Whirlpool
+
+════════════════════════════════════════
+IHRE INVESTITION
+════════════════════════════════════════
+
+  {Produkt} mit {Whirlsystem}
+
+  Regulärer Handelspreis:   {UVPPreis} €
+  Ihre Investition:         {Preis} €
+
+  Sie sparen:               {Ersparnis} €
+  (Direkt vom Hersteller – ohne Zwischenhändler)
+
+Auf 7 Jahre Nutzung gerechnet: {TagesInvestition} € pro Tag
+für tägliche Entspannung im eigenen Wellness-Bereich.
+
+Das ist keine Ausgabe. Das ist eine Entscheidung für Ihre Gesundheit und Lebensqualität.
+
+════════════════════════════════════════
+IHR NÄCHSTER SCHRITT
+════════════════════════════════════════
+
+Falls Sie sich entschieden haben: Schreiben Sie mir kurz "Ich bin dabei" – oder rufen Sie mich an.
+
+Ich kümmere mich um alles Weitere.
+
+Falls noch Fragen offen sind: Kein Problem. Ich bin da – per E-Mail oder Telefon.
+
+Tel: +49 211 78178315
+{SupportEmail}
+
+Herzliche Grüße,
+{Supportname}
+direktvomhersteller.de | SpaVida®
+
+P.S. Die Preise sind gültig bis {GültigBis}. Falls Sie mehr Zeit brauchen – melden Sie sich einfach.`,
+    JSON.stringify([
+      'Anrede', 'Nachname', 'Vorname',
+      'AusgangssituationKunde', 'KundenzielHauptwunsch',
+      'Produkt', 'Whirlsystem', 'IndividuelleBegründung', 'BildspracheNutzen',
+      'Lieferzeit', 'UVPPreis', 'Preis', 'Ersparnis', 'TagesInvestition',
+      'SupportEmail', 'Supportname', 'GültigBis'
+    ])
+  )
+
   console.log('Database initialized successfully')
 
   // Seed with test data if empty
