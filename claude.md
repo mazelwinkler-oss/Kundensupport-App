@@ -115,6 +115,7 @@ Templates verwenden: `{Anrede}` (= "Herr"/"Frau") + `{Nachname}`
     weclapp.ts        - Weclapp-Endpunkte (orders, customers, sync, sync-status)
     automations.ts    - Muster-Erkennung + n8n/Claude-Prompt-Generator (Black Book Sprache)
     chatbot.ts        - Q&A Chatbot + Training-Endpunkte (SpaVida Produkte)
+                        + upsertSopKnowledge(): 5 SOP-Einträge (sop-001–005), läuft bei JEDEM Start
     dashboard.ts      - Dashboard-Statistiken
   /services
     sync.ts           - Background-Jobs: Weclapp-Sync alle 15 min, Auto-Eskalation alle 5 min
@@ -270,6 +271,11 @@ activity_patterns (id, pattern_type, frequency, last_occurrence, metadata, creat
 | ChatbotTraining | ✅ | `frontend/src/components/Settings/ChatbotTraining.tsx` |
 | Sidebar (Heute/Posteingang/Aufträge...) | ✅ | `frontend/src/components/Layout/Sidebar.tsx` |
 | App.tsx (Routing + ChatBot global) | ✅ | `frontend/src/App.tsx` |
+| 16 Lead-Sequenz-Templates (seq-a1–a5, seq-b1–b3, seq-c1–c8) | ✅ | `backend/src/db/database.ts` |
+| 5 Ticket-Templates + SLA-Regeln (tkt-1 bis tkt-5) | ✅ | `backend/src/db/database.ts` |
+| 1 POA-Angebotstemplate (angebot-poa, 17 Platzhalter) | ✅ | `backend/src/db/database.ts` |
+| 5 SOP-Chatbot-Einträge + upsertSopKnowledge() | ✅ | `backend/src/routes/chatbot.ts` |
+| Lead-Scoring-Modell (Dokumentation in sop-004) | ✅ | `backend/src/routes/chatbot.ts` |
 
 ---
 
@@ -315,8 +321,76 @@ direktvomhersteller.de verkauft Whirlpools & Spa-Systeme der Marke SpaVida®:
 - Lieferzeiten: 2–5 Tage bis 16 Wochen je nach Modell
 - Website: https://www.direktvomhersteller.de/
 
-8 initiale Wissensbasis-Einträge werden beim Start automatisch angelegt (in `chatbot.ts`).
+8 initiale Wissensbasis-Einträge (Produkt-Q&A) + 5 SOP-Einträge werden beim Start automatisch angelegt.
 Weitere Einträge über Trainings-UI oder `POST /api/chatbot/knowledge` hinzufügen.
+
+---
+
+## Lead Follow-up & Operations System
+
+33 Templates + 5 SOP-Einträge wurden im Rahmen des 10-Schritte-Projekts ergänzt.
+Ziel: Abschlussquote aus Meta Ads Leads steigern + direkte Anfragen auf 100% sichern.
+
+### Lead-Scoring-Modell
+- **Direct inquiry:** +50 Basispunkte → automatisch Hot → Sequenz A
+- **Meta Ads:** +0 Basispunkte → meist Cold → Sequenz C
+- Hot (70+) → Sequenz A | Warm (25–69) → Sequenz B | Cold (<25) → Sequenz C
+- Vollständige Scoring-Tabelle in `chatbot_knowledge` (sop-004)
+
+### Lead-Sequenz-Templates (in `templates`-Tabelle)
+
+**Sequenz A – Hot Leads (Score 70+), 5 E-Mails in 10 Tagen**
+| ID | Name |
+|----|------|
+| seq-a1 | Erstkontakt (Tag 0, 2h nach Lead) |
+| seq-a2 | Wertaufbau Bildsprache (Tag 2) |
+| seq-a3 | Social Proof (Tag 5) |
+| seq-a4 | 5-Schritte-Ablauf (Tag 7) |
+| seq-a5 | Abschluss mit Verlustaversion (Tag 10) |
+
+**Sequenz B – Warm Leads (Score 25–69), 3 E-Mails in 14 Tagen**
+| ID | Name |
+|----|------|
+| seq-b1 | Persönlicher Ratgeber (Tag 1) |
+| seq-b2 | FAQ Einwandbehandlung (Tag 6) |
+| seq-b3 | Persönliche Empfehlung POA (Tag 14) |
+
+**Sequenz C – Cold Meta Leads (Score <25), 8-Wochen-Nurture**
+| ID | Name |
+|----|------|
+| seq-c1 | Willkommen (Woche 1) |
+| seq-c2 | Kaufratgeber (Woche 2) |
+| seq-c3 | Kundenstory (Woche 3) |
+| seq-c4 | Bestseller Spotlight (Woche 4) |
+| seq-c5 | Preiswahrheit (Woche 5) |
+| seq-c6 | Neuheit (Woche 6) |
+| seq-c7 | Indoor vs. Outdoor (Woche 7) |
+| seq-c8 | Persönliche Einladung Abschluss (Woche 8) |
+
+### Ticket-Templates (SLA-basiert)
+| ID | Kategorie | SLA |
+|----|-----------|-----|
+| tkt-1 | Reklamation / Lieferschaden | 🔴 4h |
+| tkt-2 | Lieferstatus-Anfrage | 🟡 24h |
+| tkt-3 | Produktfrage kaufnah | 🔴 4h (Revenue-kritisch!) |
+| tkt-4 | Installationsfrage | 🟡 24h |
+| tkt-5 | Technischer Defekt nach Inbetriebnahme | 🔴 4h |
+
+### POA-Angebotstemplate
+- ID: `angebot-poa` | Kategorie: `Angebot`
+- 17 Platzhalter (Anrede, Nachname, Produkt, Preis, Lieferzeit u.a.)
+- Struktur: Begrüßung → Situation → Ziel → Warum SpaVida → Empfehlung → Investition → Abschluss
+- Nach Beratungsgespräch versenden (`POST /api/templates/angebot-poa/apply`)
+
+### SOP-Chatbot-Einträge (sop-001 bis sop-005)
+Funktion `upsertSopKnowledge()` in `chatbot.ts` – läuft bei JEDEM Server-Start (INSERT OR IGNORE):
+| ID | Frage |
+|----|-------|
+| sop-001 | Tägliche Routine (5 Zeitblöcke: 08:00–12:15) |
+| sop-002 | Lead- vs. Ticket-Priorität (Hot Leads IMMER zuerst) |
+| sop-003 | SLA-Zeiten (4h / 24h / 48h) |
+| sop-004 | Lead-Scoring + Sequenz-Zuweisung (vollständige Tabelle) |
+| sop-005 | Direkte Anfrage = Gold (Workflow: Score → Call → seq-a1 → HubSpot) |
 
 ---
 
@@ -338,3 +412,4 @@ Weitere Einträge über Trainings-UI oder `POST /api/chatbot/knowledge` hinzufü
 - `seed.ts`: Guard `if (process.env.SEED_DATA !== 'true') return` – verhindert Testdaten-Überschreibung
 - `gmail/client.ts`: OAuth2 Refresh Token statt Service Account (Org-Policy blockiert JSON-Keys)
 - `weclapp/client.ts`: `upsertCustomerFromOrder()` – erstellt Kunden aus Auftragsadresse wenn nicht in DB
+- `chatbot.ts`: `upsertSopKnowledge()` läuft bei JEDEM Start (nicht nur wenn count=0) – INSERT OR IGNORE verhindert Duplikate
