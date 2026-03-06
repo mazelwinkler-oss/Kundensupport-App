@@ -112,8 +112,113 @@ function findBestAnswer(question: string): { answer: string; confidence: number;
   }
 }
 
+// Upsert SOP & Operations knowledge (runs every startup, INSERT OR IGNORE by question hash)
+function upsertSopKnowledge() {
+  const upsert = db.prepare(`
+    INSERT OR IGNORE INTO chatbot_knowledge (id, question, answer, category, keywords, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+  const now = new Date().toISOString()
+
+  const sopEntries = [
+    {
+      id: 'sop-001',
+      question: 'Was ist meine tägliche Routine und Reihenfolge',
+      answer: `Tages-SOP (5 Blöcke):
+① 08:00–08:15 SCAN: HubSpot Heiße-Lead-Liste + SLA-Alarm + Gmail prüfen. Nur schauen, nicht bearbeiten.
+② 08:15–09:45 LEADS: Direkte Anfragen → Heiße Leads → Warme Leads → Neue Meta-Leads scoren. Anrufe JETZT.
+③ 09:45–10:15 WECLAPP: Bestellungen, Versand anstoßen, überfällige Lieferungen, offene Rechnungen.
+④ 10:15–11:45 TICKETS: SLA-Reihe strikt einhalten: Überschritten → Reklamation/Defekt (4h) → Produktfrage kaufnah (4h) → Lieferstatus (24h) → Installation (24h) → Allgemein (48h).
+⑤ 11:45–12:15 DASHBOARD: Abschluss, Morgen vorbereiten, Compliance prüfen.
+Nachmittag: Rückrufe, Versand, Templates, Meta-Lead-Scoring.`,
+      category: 'SOP',
+      keywords: 'routine,tagesplan,reihenfolge,sop,ablauf,morgen,tagesablauf,zeitplan,block'
+    },
+    {
+      id: 'sop-002',
+      question: 'Welche Priorität haben Leads gegenüber Tickets',
+      answer: `Prioritätsregel: Heiße Leads IMMER vor Tickets – mit einer Ausnahme.
+
+Leads gehen vor, weil: Umsatz entsteht heute. Ein verpasster heißer Lead = 4.500 € weg.
+Tickets gehen vor wenn: SLA-Status "Überschritten" bei Reklamation oder Defekt.
+
+Reihenfolge:
+1. SLA-Eskalation Reklamation/Defekt (4h überschritten)
+2. Direkte Anfragen (Gold – <1h Reaktion)
+3. Heiße Leads (Score 70+)
+4. Produktfragen kaufnah (Umsatz-kritisch! 4h SLA)
+5. Warme Leads
+6. Alle anderen Tickets
+7. Kalte Leads (laufen automatisch via Sequenz C)`,
+      category: 'SOP',
+      keywords: 'priorität,reihenfolge,leads,tickets,zuerst,wichtig,dringend,wann'
+    },
+    {
+      id: 'sop-003',
+      question: 'Was sind die SLA Zeiten für Tickets',
+      answer: `SLA-Zeiten (Service Level Agreement – maximale Reaktionszeit):
+
+🔴 4 Stunden (Urgent):
+- Reklamation / Schaden bei Lieferung → Template tkt-1
+- Technischer Defekt nach Inbetriebnahme → Template tkt-5
+- Produktfrage kaufnah (Umsatz!) → Template tkt-3
+
+🟡 24 Stunden (Hoch):
+- Lieferstatus-Anfrage → Template tkt-2
+- Installationsfrage → Template tkt-4
+
+🟢 48 Stunden (Normal):
+- Allgemeine Anfragen
+
+Wenn SLA überschritten: HubSpot zeigt "Überschritten" in rot → sofort bearbeiten, alles andere wartet.`,
+      category: 'SOP',
+      keywords: 'sla,reaktionszeit,ticket,stunden,frist,wann,antworten,zeit,deadline'
+    },
+    {
+      id: 'sop-004',
+      question: 'Wie scorre ich einen Lead und welche Sequenz bekommt er',
+      answer: `Lead-Scoring Kurzanleitung:
+
+Addiere die Punkte:
++ Lead-Quelle: Direkte Anfrage +50 · Empfehlung +40 · Google Ads +15 · Meta Ads +0
++ Produkt: Outdoor London/Crown +30 · Malibu/Sofia +25 · Royal/Emporio +20 · Rainbow/Zara/Rom +15
++ Whirlsystem: Exclusive/Champagner +25 · Deluxe/Excellent +15 · Superior +5
++ Kaufzeitrahmen: Sofort +30 · <4 Wochen +20 · 1-3 Monate +10 · Unklar +0
++ B2B/Hotel: +25 · Rückruf erbeten: +15 · Detailfragen: +10
+
+Ergebnis → Sequenz:
+70+ Punkte → 🔥 HEISS → Sequenz A (sofort anrufen + 5 E-Mails/10 Tage)
+25–69 Punkte → 🟡 WARM → Sequenz B (Anruf 24h + 3 E-Mails/14 Tage)
+<25 Punkte → ❄️ KALT → Sequenz C (8 Wochen Nurture, automatisch)`,
+      category: 'SOP',
+      keywords: 'score,scoring,punkte,lead,bewerten,sequenz,welche,kategorie,heiß,warm,kalt'
+    },
+    {
+      id: 'sop-005',
+      question: 'Was mache ich wenn eine direkte Anfrage reinkommt',
+      answer: `Direkte Anfrage = Gold. Sofortiger Ablauf:
+
+① Score berechnen: Direkte Anfrage = bereits 50 Punkte Basis → fast immer Heiß (70+).
+② Innerhalb 1 Stunde anrufen (während Geschäftszeiten). Falls nicht erreichbar: Voicemail + E-Mail seq-a1.
+③ E-Mail seq-a1 senden (Betreff: "Ihre Anfrage zum [Produkt] – ich melde mich heute noch persönlich").
+④ In HubSpot: Lead-Kategorie = Heiß, Sequenz A starten, Anruf-Task für heute.
+⑤ Falls Produkt bekannt: Weclapp prüfen – Verfügbarkeit, Lieferzeit notieren für Gespräch.
+
+Merke: 75-80% deiner direkten Anfragen kaufen. Keine einzige darf untergehen.`,
+      category: 'SOP',
+      keywords: 'direkte anfrage,direkt,anfrage,website,kontaktformular,reaktion,was tun,sofort'
+    }
+  ]
+
+  for (const e of sopEntries) {
+    upsert.run(e.id, e.question, e.answer, e.category, e.keywords, now, now)
+  }
+  console.log('[Chatbot] SOP knowledge upserted')
+}
+
 // Initialize knowledge on startup
 seedKnowledge()
+upsertSopKnowledge()
 
 // POST /api/chatbot – Ask a question
 chatbotRouter.post('/', (req, res) => {
